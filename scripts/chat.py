@@ -1,4 +1,5 @@
 import time
+from functools import wraps
 import openai
 from dotenv import load_dotenv
 from config import Config
@@ -6,6 +7,24 @@ import token_counter
 from llm_utils import create_chat_completion
 
 cfg = Config()
+
+def retry_with_exponential_backoff(max_retries=5, initial_delay=1, factor=2):
+    def decorator_retry(func):
+        @wraps(func)
+        def wrapper_retry(*args, **kwargs):
+            retries = 0
+            delay = initial_delay
+            while retries <= max_retries:
+                try:
+                    return func(*args, **kwargs)
+                except Exception as e:
+                    print(f"Attempt {retries + 1} failed: {e}. Retrying in {delay} seconds.")
+                    time.sleep(delay)
+                    delay *= factor
+                    retries += 1
+            raise Exception("All attempts failed")
+        return wrapper_retry
+    return decorator_retry
 
 def create_chat_message(role, content):
     """
@@ -39,6 +58,7 @@ def generate_context(prompt, relevant_memory, full_message_history, model):
 
 
 # TODO: Change debug from hardcode to argument
+@retry_with_exponential_backoff()
 def chat_with_ai(
         prompt,
         user_input,
@@ -71,7 +91,7 @@ def chat_with_ai(
 
             relevant_memory = permanent_memory.get_relevant(str(full_message_history[-5:]), 10)
 
-            if cfg.debug:
+            if cfg.debug_mode:
                 print('Memory Stats: ', permanent_memory.get_stats())
 
             next_message_to_add_index, current_tokens_used, insertion_index, current_context = generate_context(
@@ -110,7 +130,7 @@ def chat_with_ai(
             # assert tokens_remaining >= 0, "Tokens remaining is negative. This should never happen, please submit a bug report at https://www.github.com/Torantulino/Auto-GPT"
 
             # Debug print the current context
-            if cfg.debug:
+            if cfg.debug_mode:
                 print(f"Token limit: {token_limit}")
                 print(f"Send Token Count: {current_tokens_used}")
                 print(f"Tokens remaining for response: {tokens_remaining}")
