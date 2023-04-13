@@ -9,6 +9,15 @@ import logging
 
 cfg = Config()
 
+def is_connected():
+    try:
+        # Connect to a well-known public DNS server (Google's DNS server)
+        socket.create_connection(("8.8.8.8", 53))
+        return True
+    except OSError:
+        pass
+    return False
+
 def create_chat_message(role, content):
     """
     Create a chat message with the given role and content.
@@ -138,6 +147,19 @@ def chat_with_ai(
 
             return assistant_reply
         except openai.error.RateLimitError:
-            # TODO: When we switch to langchain, this is built in
-            print("Error: ", "API Rate Limit Reached. Waiting 10 seconds...")
+            print("Error: API Rate Limit Reached. Waiting 10 seconds...")
             time.sleep(10)
+        except (requests.exceptions.ConnectionError, openai.error.APIConnectionError) as e:
+            print(f"API connection error: {e}.")
+            while not is_connected():
+                print("Network connection is not available. Waiting for user input...")
+                user_choice = input("Enter 'r' to retry or 'q' to quit: ").lower()
+                if user_choice == 'q':
+                    exit(0)
+                if user_choice == 'r' and is_connected():
+                    print("Connection re-established. Continuing...")
+                    break
+                else:
+                    print("Invalid input or network connection still not available.")
+                time.sleep(5)  # Adjust this sleep time to a suitable value
+            continue
